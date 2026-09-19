@@ -1,9 +1,12 @@
-# Kubernetes cluster access via SSH tunnel to Prometheus
-ssh:
-  hostname: ${SSH_HOSTNAME}
-  port: 22
-  username: ${SSH_USERNAME}
-  password: ${SSH_PASSWORD}
+# Prometheus HTTP endpoint
+# Use one of:
+#   - kubectl port-forward:  http://localhost:9091
+#   - In-cluster service:    http://prometheus.monitoring.svc:9090
+#   - External URL:          http://<node-ip>:<nodeport>
+prometheus:
+  url: "http://localhost:9091"
+  total_cpu_cores: 8
+  total_memory_gb: 8
   timeout: 10
 
 # Kubernetes deployment target
@@ -29,14 +32,6 @@ vpa:
   initial_memory: 512   # 512 MiB
   memory_step: 128      # 128 MiB per action
   container_name: nginx
-
-# Prometheus queries (executed remotely via SSH)
-prometheus:
-  endpoint: "http://localhost:9091"
-  cpu_query: "sum(rate(container_cpu_usage_seconds_total[1m]))"
-  memory_query: "sum(container_memory_usage_bytes)"
-  total_cpu_cores: 8
-  total_memory_gb: 8
 
 # Latency observation
 latency:

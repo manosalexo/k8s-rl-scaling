@@ -86,26 +86,26 @@ This deploys:
 - **ServiceAccount + ClusterRole** for scraping kubelet/cAdvisor
 - **ConfigMap** with scrape configuration
 
-### Port Forwarding (for SSH-tunneled access)
+### Accessing Prometheus
 
-The RL training scripts access Prometheus from a local machine through an SSH tunnel. On the Kubernetes node:
-
-```bash
-# Expose Prometheus on localhost:9091
-kubectl port-forward -n monitoring svc/prometheus 9091:9090 --address=0.0.0.0 &
-```
-
-Then from your local machine:
+The RL training script queries Prometheus via its HTTP API. Choose the access method that fits your setup:
 
 ```bash
-# SSH tunnel — forwards local:9091 to remote:9091
-ssh -L 9091:localhost:9091 user@your-k8s-node
+# Option 1: kubectl port-forward (local development — recommended)
+kubectl port-forward -n monitoring svc/prometheus 9091:9090 &
+# Script connects to http://localhost:9091 (the default in config)
+
+# Option 2: In-cluster (script runs as a K8s Pod/Job)
+# Set prometheus.url to http://prometheus.monitoring.svc:9090 in config
+
+# Option 3: NodePort (remote access without port-forward)
+kubectl patch svc prometheus -n monitoring -p '{"spec":{"type":"NodePort","ports":[{"port":9090,"nodePort":30090}]}}'
+# Set prometheus.url to http://<node-ip>:30090 in config
 ```
 
 ### Verify Prometheus
 
 ```bash
-# On the K8s node (or via tunnel)
 curl 'http://localhost:9091/api/v1/query?query=up'
 
 # Check that cAdvisor metrics are being scraped
@@ -299,16 +299,6 @@ pip install -r requirements.txt
 
 ## 7. Configuration
 
-### Environment Variables
-
-Set SSH credentials for accessing the Kubernetes node:
-
-```bash
-export SSH_HOSTNAME="your-k8s-node-hostname"
-export SSH_USERNAME="your-ssh-username"
-export SSH_PASSWORD="your-ssh-password"
-```
-
 ### Config File
 
 The default configuration is in `config/default.yaml`. To customize without modifying the tracked file:
@@ -323,7 +313,8 @@ Key parameters to adjust:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `ssh.hostname` | `${SSH_HOSTNAME}` | K8s node SSH address |
+| `prometheus.url` | `http://localhost:9091` | Prometheus HTTP endpoint |
+| `prometheus.timeout` | `10` | HTTP request timeout (seconds) |
 | `kubernetes.kubeconfig_path` | `~/.kube/config` | Path to kubeconfig |
 | `latency.threshold_high` | `10` ms | Scale-up threshold |
 | `latency.threshold_low` | `5` ms | Scale-down threshold |

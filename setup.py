@@ -13,7 +13,7 @@ setup(
         "gymnasium>=0.29.0",
         "numpy>=1.23.0",
         "kubernetes>=12.0.0",
-        "paramiko>=3.0.0",
+        "requests>=2.28.0",
         "pandas>=1.4.0",
         "matplotlib>=3.5.0",
         "pyyaml>=5.4.0",

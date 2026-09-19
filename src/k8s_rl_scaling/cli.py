@@ -50,15 +50,12 @@ def main():
 
     cfg = load_config(args.config)
 
+    prom_cfg = cfg["prometheus"]
     collector = MetricsCollector(
-        hostname=cfg["ssh"]["hostname"],
-        port=cfg["ssh"]["port"],
-        username=cfg["ssh"]["username"],
-        password=cfg["ssh"]["password"],
-        timeout=cfg["ssh"]["timeout"],
-        prometheus_endpoint=cfg["prometheus"]["endpoint"],
-        total_cpu_cores=cfg["prometheus"]["total_cpu_cores"],
-        total_memory_gb=cfg["prometheus"]["total_memory_gb"],
+        prometheus_url=prom_cfg["url"],
+        total_cpu_cores=prom_cfg["total_cpu_cores"],
+        total_memory_gb=prom_cfg["total_memory_gb"],
+        timeout=prom_cfg.get("timeout", 10),
     )
 
     jmeter_cfg = cfg["jmeter"]

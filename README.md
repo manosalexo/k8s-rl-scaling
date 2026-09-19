@@ -30,7 +30,7 @@ This project accompanies a master's thesis at the **University of West Attica**,
 |-----------|-------------|
 | **Agents** | Q-Learning (tabular, model-free) and Dyna-Q (tabular, model-based with planning steps) |
 | **Environments** | Custom Gymnasium envs for HPA (replica scaling) and VPA (CPU/memory request scaling) |
-| **Metrics** | SSH-tunneled Prometheus queries for CPU/RAM; JMeter CSV parsing for latency |
+| **Metrics** | Prometheus HTTP API for CPU/RAM; JMeter CSV parsing for latency |
 | **State Space** | Latency discretized into 5 bins: [0–2s), [2–4s), [4–6s), [6–8s), [8–10s] |
 | **Action Space** | 3 discrete actions: scale down (0), no change (1), scale up (2) |
 
@@ -53,7 +53,7 @@ This project accompanies a master's thesis at the **University of West Attica**,
 ```
 k8s-rl-scaling/
 ├── config/
-│   └── default.yaml              # All configurable parameters (uses env vars for secrets)
+│   └── default.yaml              # All configurable parameters
 ├── src/k8s_rl_scaling/
 │   ├── agents/
 │   │   ├── q_learning.py          # Tabular Q-Learning with epsilon-greedy
@@ -62,7 +62,7 @@ k8s-rl-scaling/
 │   │   ├── hpa_env.py             # Gymnasium env — scales replicas via K8s API
 │   │   └── vpa_env.py             # Gymnasium env — scales CPU/memory requests via K8s API
 │   ├── metrics/
-│   │   ├── collector.py           # Prometheus metrics via SSH tunnel
+│   │   ├── collector.py           # Prometheus metrics via HTTP API
 │   │   └── jmeter.py              # JMeter execution and CSV parsing
 │   ├── training/
 │   │   └── trainer.py             # Training loop orchestration
@@ -94,7 +94,7 @@ k8s-rl-scaling/
 - Access to a Kubernetes cluster (MicroK8s, minikube, etc.)
 - Apache JMeter 5.5+ for load generation
 
-> **Detailed setup instructions** for MicroK8s, Prometheus, Grafana, JMeter, and SSH tunneling are in [`docs/setup-guide.md`](docs/setup-guide.md).
+> **Detailed setup instructions** for MicroK8s, Prometheus, Grafana, and JMeter are in [`docs/setup-guide.md`](docs/setup-guide.md).
 
 ### Installation
 
@@ -122,15 +122,20 @@ make port-forward        # Expose Prometheus and Grafana locally
 
 ### Configuration
 
-Set your SSH credentials as environment variables:
+The training script connects to Prometheus via HTTP. Make sure Prometheus is reachable:
 
 ```bash
-export SSH_HOSTNAME="your-k8s-node-hostname"
-export SSH_USERNAME="your-username"
-export SSH_PASSWORD="your-password"
+# Option 1: kubectl port-forward (local development)
+make port-forward    # Exposes Prometheus at http://localhost:9091
+
+# Option 2: In-cluster (script runs as a Pod)
+# Set prometheus.url to http://prometheus.monitoring.svc:9090 in config
+
+# Option 3: NodePort/Ingress (remote access)
+# Set prometheus.url to the external URL in config
 ```
 
-Or create a `config/local.yaml` (gitignored) with your specific values.
+Override defaults by creating a `config/local.yaml` (gitignored).
 
 ### Train an Agent
 

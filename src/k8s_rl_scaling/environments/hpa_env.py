@@ -1,0 +1,123 @@
+"""Gymnasium environment for Kubernetes HPA (Horizontal Pod Autoscaler) scaling."""
+
+import numpy as np
+import gymnasium as gym
+from gymnasium import spaces
+from kubernetes import client, config
+
+
+class HPAEnv(gym.Env):
+    """Scale a Kubernetes Deployment's replica count based on observed latency.
+
+    Actions: 0 = scale down, 1 = no change, 2 = scale up.
+    Observation: latency in milliseconds (shape (1,), range [0, max_latency]).
+    """
+
+    metadata = {"render_modes": ["human"]}
+
+    def __init__(
+        self,
+        namespace: str = "monitoring",
+        deployment_name: str = "nginx-deployment",
+        min_replicas: int = 1,
+        max_replicas: int = 10,
+        initial_replicas: int = 3,
+        max_latency: float = 10000.0,
+        latency_high: float = 10.0,
+        latency_low: float = 5.0,
+        latency_source=None,
+        kubeconfig_path: str | None = None,
+        reward_cfg: dict | None = None,
+    ):
+        super().__init__()
+
+        self.namespace = namespace
+        self.deployment_name = deployment_name
+        self.min_replicas = min_replicas
+        self.max_replicas = max_replicas
+        self.initial_replicas = initial_replicas
+        self.current_replicas = initial_replicas
+        self.latency_high = latency_high
+        self.latency_low = latency_low
+        self.latency_source = latency_source
+
+        r = reward_cfg or {}
+        self.step_penalty = r.get("step_penalty", -0.1)
+        self.optimal_bonus = r.get("optimal_bonus", 2.0)
+        self.underload_penalty = r.get("underload_penalty", -0.5)
+        self.overload_penalty = r.get("overload_penalty", -1.0)
+        self.stability_bonus = r.get("stability_bonus", 0.5)
+
+        self.action_space = spaces.Discrete(3)
+        self.observation_space = spaces.Box(
+            low=0, high=max_latency, shape=(1,), dtype=np.float32
+        )
+
+        if kubeconfig_path:
+            config.load_kube_config(config_file=kubeconfig_path)
+        else:
+            try:
+                config.load_incluster_config()
+            except config.ConfigException:
+                config.load_kube_config()
+
+        self.apps_v1 = client.AppsV1Api()
+
+    def _get_latency(self) -> np.ndarray:
+        if self.latency_source is not None:
+            latency = self.latency_source()
+            return np.array(
+                [np.clip(latency, 0, self.observation_space.high[0])],
+                dtype=np.float32,
+            )
+        return np.array([0.0], dtype=np.float32)
+
+    def _scale(self, action: int):
+        if action == 0:
+            self.current_replicas = max(self.min_replicas, self.current_replicas - 1)
+        elif action == 2:
+            self.current_replicas = min(self.max_replicas, self.current_replicas + 1)
+
+        body = {"spec": {"replicas": self.current_replicas}}
+        self.apps_v1.patch_namespaced_deployment_scale(
+            name=self.deployment_name,
+            namespace=self.namespace,
+            body=body,
+        )
+
+    def _compute_reward(self, latency: float) -> float:
+        reward = self.step_penalty
+        if self.latency_low <= latency <= self.latency_high:
+            reward += self.optimal_bonus
+        elif latency < self.latency_low:
+            reward += self.underload_penalty
+        else:
+            reward += self.overload_penalty
+        if self.current_replicas == self.initial_replicas:
+            reward += self.stability_bonus
+        return reward
+
+    def step(self, action: int):
+        state = self._get_latency()
+        latency = float(state[0])
+
+        if latency > self.latency_high:
+            action = 2
+        elif latency < self.latency_low:
+            action = 0
+        else:
+            action = 1
+
+        self._scale(action)
+        next_state = self._get_latency()
+        reward = self._compute_reward(latency)
+
+        return next_state, reward, False, False, {"replicas": self.current_replicas}
+
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed, options=options)
+        self.current_replicas = self.initial_replicas
+        return self._get_latency(), {}
+
+    def render(self):
+        print(f"Replicas: {self.current_replicas}")

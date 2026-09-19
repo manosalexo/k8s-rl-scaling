@@ -1,0 +1,77 @@
+# Kubernetes cluster access via SSH tunnel to Prometheus
+ssh:
+  hostname: ${SSH_HOSTNAME}
+  port: 22
+  username: ${SSH_USERNAME}
+  password: ${SSH_PASSWORD}
+  timeout: 10
+
+# Kubernetes deployment target
+kubernetes:
+  namespace: monitoring
+  deployment_name: nginx-deployment
+  kubeconfig_path: ~/.kube/config
+
+# HPA-specific settings
+hpa:
+  min_replicas: 1
+  max_replicas: 10
+  initial_replicas: 3
+
+# VPA-specific settings
+vpa:
+  min_cpu: 0.025        # 25m
+  max_cpu: 1.0          # 1 core (hard limit)
+  initial_cpu: 0.1      # 100m
+  cpu_step: 0.1         # 100m per action
+  min_memory: 256       # 256 MiB
+  max_memory: 1024      # 1 GiB (hard limit)
+  initial_memory: 512   # 512 MiB
+  memory_step: 128      # 128 MiB per action
+  container_name: nginx
+
+# Prometheus queries (executed remotely via SSH)
+prometheus:
+  endpoint: "http://localhost:9091"
+  cpu_query: "sum(rate(container_cpu_usage_seconds_total[1m]))"
+  memory_query: "sum(container_memory_usage_bytes)"
+  total_cpu_cores: 8
+  total_memory_gb: 8
+
+# Latency observation
+latency:
+  max_value: 10000      # ms, upper bound for observation space
+  threshold_high: 10    # ms, scale up above this
+  threshold_low: 5      # ms, scale down below this
+  num_bins: 5           # discretization bins for Q-table
+  bin_width: 2000       # ms per bin (max_value / num_bins)
+
+# RL agent hyperparameters
+agent:
+  learning_rate: 0.05
+  discount_factor: 0.9
+  exploration_rate: 1.0
+  exploration_decay: 0.999
+  min_exploration_rate: 0.01
+
+# Dyna-Q specific
+dyna_q:
+  planning_steps: 5
+
+# Training
+training:
+  num_episodes: 10
+  max_steps_per_episode: 10
+  reward:
+    step_penalty: -0.1
+    optimal_bonus: 2.0
+    underload_penalty: -0.5
+    overload_penalty: -1.0
+    stability_bonus: 0.5   # HPA only: reward for maintaining initial replicas
+
+# JMeter load testing
+jmeter:
+  path: ~/apache-jmeter-5.5/bin
+  jmx_template: templates/NGINX-load.jmx
+  output_dir: output
+  output_file: jmeterlogs.csv

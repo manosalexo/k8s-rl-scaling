@@ -34,8 +34,6 @@ class DynaQAgent(QLearningAgent):
         self.model[(idx, action)] = (reward, next_idx)
 
         # Planning: replay from model
-        if not self.model:
-            return
         keys = list(self.model.keys())
         for _ in range(self.planning_steps):
             s_idx, a = random.choice(keys)

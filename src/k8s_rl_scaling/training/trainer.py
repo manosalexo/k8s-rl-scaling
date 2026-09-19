@@ -87,6 +87,9 @@ class Trainer:
                     state = next_state
                     total_reward += reward
 
+                    if terminated or truncated:
+                        break
+
                 rewards_per_episode.append(total_reward)
 
                 if hasattr(self.agent, "decay_exploration"):

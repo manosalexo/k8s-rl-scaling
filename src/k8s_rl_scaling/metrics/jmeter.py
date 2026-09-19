@@ -42,9 +42,12 @@ class JMeterRunner:
         output_dir: str = "output",
         output_file: str = "jmeterlogs.csv",
     ):
+        jmeter_path = os.path.expanduser(jmeter_path)
         self.jmeter_bin = os.path.join(jmeter_path, "jmeter")
         self.jmx_path = os.path.join(jmeter_path, jmx_template)
-        self.csv_output = os.path.join(jmeter_path, output_dir, output_file)
+        output_path = os.path.join(jmeter_path, output_dir)
+        os.makedirs(output_path, exist_ok=True)
+        self.csv_output = os.path.join(output_path, output_file)
 
     def run(self, wait: bool = True) -> subprocess.Popen:
         process = subprocess.Popen(

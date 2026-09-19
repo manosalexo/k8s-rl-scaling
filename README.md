@@ -1,8 +1,8 @@
 # k8s-rl-scaling
 
-Reinforcement Learning for Kubernetes Auto-Scaling — Q-Learning and Dyna-Q agents that learn optimal HPA (Horizontal Pod Autoscaler) and VPA (Vertical Pod Autoscaler) policies based on real-time latency metrics.
+Reinforcement Learning for Kubernetes Auto-Scaling — Q-Learning, Dyna-Q, Dyna-Q+, and Deep Q-Network (DQN) agents that learn optimal HPA (Horizontal Pod Autoscaler) and VPA (Vertical Pod Autoscaler) policies based on real-time latency metrics.
 
-This project accompanies a master's thesis at the **University of West Attica**, Department of Informatics and Computer Engineering. It demonstrates how model-free (Q-Learning) and model-based (Dyna-Q) RL algorithms can be applied to the auto-scaling problem in Kubernetes, outperforming static threshold-based approaches.
+This project accompanies a master's thesis at the **University of West Attica**, Department of Informatics and Computer Engineering. It demonstrates how tabular (Q-Learning, Dyna-Q, Dyna-Q+) and deep (DQN) RL algorithms can be applied to the auto-scaling problem in Kubernetes, outperforming static threshold-based approaches.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ This project accompanies a master's thesis at the **University of West Attica**,
 │                                                              │
 │  ┌────────────────┐   ┌───────────────┐   ┌──────────────┐  │
 │  │  Gymnasium Env │◀──│  RL Agent     │──▶│  K8s API     │  │
-│  │  (HPA or VPA)  │   │  (Q / Dyna-Q) │   │  (scale)     │  │
+│  │  (HPA or VPA)  │   │  (Q/DQ/DQ+/DQN)│  │  (scale)     │  │
 │  └────────────────┘   └───────────────┘   └──────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -28,10 +28,10 @@ This project accompanies a master's thesis at the **University of West Attica**,
 
 | Component | Description |
 |-----------|-------------|
-| **Agents** | Q-Learning (tabular, model-free) and Dyna-Q (tabular, model-based with planning steps) |
+| **Agents** | Q-Learning (tabular, model-free), Dyna-Q (tabular, model-based), Dyna-Q+ (Dyna-Q with exploration bonus), DQN (neural network with experience replay) |
 | **Environments** | Custom Gymnasium envs for HPA (replica scaling) and VPA (CPU/memory request scaling) |
 | **Metrics** | Prometheus HTTP API for CPU/RAM; JMeter CSV parsing for latency |
-| **State Space** | Latency discretized into 5 bins: [0–2s), [2–4s), [4–6s), [6–8s), [8–10s] |
+| **State Space** | Latency — discretized into 5 bins for tabular agents, continuous for DQN |
 | **Action Space** | 3 discrete actions: scale down (0), no change (1), scale up (2) |
 
 ## Experimental Setup
@@ -57,7 +57,9 @@ k8s-rl-scaling/
 ├── src/k8s_rl_scaling/
 │   ├── agents/
 │   │   ├── q_learning.py          # Tabular Q-Learning with epsilon-greedy
-│   │   └── dyna_q.py              # Dyna-Q extending Q-Learning with model-based planning
+│   │   ├── dyna_q.py              # Dyna-Q extending Q-Learning with model-based planning
+│   │   ├── dyna_q_plus.py         # Dyna-Q+ with time-based exploration bonus (κ√τ)
+│   │   └── dqn.py                 # Deep Q-Network with replay buffer and target network
 │   ├── environments/
 │   │   ├── hpa_env.py             # Gymnasium env — scales replicas via K8s API
 │   │   └── vpa_env.py             # Gymnasium env — scales CPU/memory requests via K8s API
@@ -146,14 +148,22 @@ k8s-rl-train --algorithm q-learning --scaler hpa
 # Dyna-Q with VPA
 k8s-rl-train --algorithm dyna-q --scaler vpa
 
+# Dyna-Q+ with HPA
+k8s-rl-train --algorithm dyna-q-plus --scaler hpa
+
+# DQN with HPA (requires PyTorch)
+pip install -e '.[dqn]'
+k8s-rl-train --algorithm dqn --scaler hpa
+
 # Custom config and episode count
 k8s-rl-train --algorithm dyna-q --scaler hpa --config config/local.yaml --episodes 20
 ```
 
-### Run All 4 Combinations
+### Run All Combinations
 
 ```bash
-make train-all
+make train-all       # All tabular agents (Q-Learning, Dyna-Q, Dyna-Q+)
+make train-dqn       # DQN (requires PyTorch)
 ```
 
 ### Compare Results
@@ -175,6 +185,8 @@ From the thesis experiments:
 
 ## Hyperparameters
 
+### Tabular Agents (Q-Learning, Dyna-Q, Dyna-Q+)
+
 | Parameter | Value |
 |-----------|-------|
 | Learning rate (α) | 0.05 |
@@ -182,8 +194,22 @@ From the thesis experiments:
 | Initial exploration (ε) | 1.0 |
 | Exploration decay | 0.999 |
 | Min exploration | 0.01 |
-| Dyna-Q planning steps | 5 |
+| Dyna-Q / Dyna-Q+ planning steps | 5 |
+| Dyna-Q+ exploration bonus (κ) | 0.001 |
 | Latency bins | 5 (0–2s, 2–4s, 4–6s, 6–8s, 8–10s) |
+
+### DQN
+
+| Parameter | Value |
+|-----------|-------|
+| Learning rate (α) | 0.001 (Adam) |
+| Discount factor (γ) | 0.9 |
+| Hidden layers | 2 × 64 (ReLU) |
+| Replay buffer capacity | 10,000 |
+| Batch size | 32 |
+| Target network update | every 100 steps |
+| Loss | Smooth L1 (Huber) |
+| Gradient clipping | max norm 1.0 |
 
 ## Reward Function
 

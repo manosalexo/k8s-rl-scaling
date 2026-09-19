@@ -19,6 +19,7 @@ class DynaQAgent(QLearningAgent):
         action: int,
         reward: float,
         next_state: np.ndarray,
+        done: bool = False,
     ):
         idx = self.discretize_state(state)
         next_idx = self.discretize_state(next_state)

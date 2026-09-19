@@ -4,14 +4,70 @@ import argparse
 import sys
 
 from k8s_rl_scaling.config import load_config
-from k8s_rl_scaling.agents import QLearningAgent, DynaQAgent
+from k8s_rl_scaling.agents import QLearningAgent, DynaQAgent, DynaQPlusAgent
 from k8s_rl_scaling.environments import HPAEnv, VPAEnv
 from k8s_rl_scaling.metrics import MetricsCollector, JMeterRunner
 from k8s_rl_scaling.training import Trainer
 
 
-ALGORITHMS = {"q-learning", "dyna-q"}
+ALGORITHMS = {"q-learning", "dyna-q", "dyna-q-plus", "dqn"}
 SCALERS = {"hpa", "vpa"}
+
+
+def _build_tabular_agent(algorithm: str, cfg: dict, action_size: int):
+    agent_cfg = cfg["agent"]
+    common = dict(
+        action_size=action_size,
+        num_bins=cfg["latency"]["num_bins"],
+        bin_width=cfg["latency"]["bin_width"],
+        learning_rate=agent_cfg["learning_rate"],
+        discount_factor=agent_cfg["discount_factor"],
+        exploration_rate=agent_cfg["exploration_rate"],
+        exploration_decay=agent_cfg["exploration_decay"],
+        min_exploration_rate=agent_cfg["min_exploration_rate"],
+    )
+
+    if algorithm == "q-learning":
+        return QLearningAgent(**common)
+    if algorithm == "dyna-q":
+        return DynaQAgent(
+            planning_steps=cfg["dyna_q"]["planning_steps"],
+            **common,
+        )
+    if algorithm == "dyna-q-plus":
+        return DynaQPlusAgent(
+            planning_steps=cfg["dyna_q_plus"]["planning_steps"],
+            kappa=cfg["dyna_q_plus"]["kappa"],
+            **common,
+        )
+    raise ValueError(f"Unknown tabular algorithm: {algorithm}")
+
+
+def _build_dqn_agent(cfg: dict, state_dim: int, action_size: int):
+    try:
+        from k8s_rl_scaling.agents.dqn import DQNAgent
+    except ImportError:
+        print(
+            "Error: DQN requires PyTorch. Install with: pip install torch",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    agent_cfg = cfg["agent"]
+    dqn_cfg = cfg["dqn"]
+    return DQNAgent(
+        state_dim=state_dim,
+        action_size=action_size,
+        hidden_dim=dqn_cfg["hidden_dim"],
+        learning_rate=dqn_cfg.get("learning_rate", agent_cfg["learning_rate"]),
+        discount_factor=agent_cfg["discount_factor"],
+        exploration_rate=agent_cfg["exploration_rate"],
+        exploration_decay=agent_cfg["exploration_decay"],
+        min_exploration_rate=agent_cfg["min_exploration_rate"],
+        buffer_capacity=dqn_cfg["buffer_capacity"],
+        batch_size=dqn_cfg["batch_size"],
+        target_update_freq=dqn_cfg["target_update_freq"],
+    )
 
 
 def main():
@@ -103,28 +159,22 @@ def main():
             reward_cfg=cfg["training"]["reward"],
         )
 
-    agent_cfg = cfg["agent"]
-    common_kwargs = dict(
-        action_size=env.action_space.n,
-        num_bins=cfg["latency"]["num_bins"],
-        bin_width=cfg["latency"]["bin_width"],
-        learning_rate=agent_cfg["learning_rate"],
-        discount_factor=agent_cfg["discount_factor"],
-        exploration_rate=agent_cfg["exploration_rate"],
-        exploration_decay=agent_cfg["exploration_decay"],
-        min_exploration_rate=agent_cfg["min_exploration_rate"],
-    )
-
-    if args.algorithm == "q-learning":
-        agent = QLearningAgent(**common_kwargs)
+    if args.algorithm == "dqn":
+        agent = _build_dqn_agent(
+            cfg,
+            state_dim=env.observation_space.shape[0],
+            action_size=env.action_space.n,
+        )
     else:
-        agent = DynaQAgent(
-            planning_steps=cfg["dyna_q"]["planning_steps"],
-            **common_kwargs,
+        agent = _build_tabular_agent(
+            args.algorithm, cfg, action_size=env.action_space.n,
         )
 
     num_episodes = args.episodes or cfg["training"]["num_episodes"]
-    output = args.output or f"outputs/metrics_{args.algorithm}_{args.scaler}.csv"
+    output = (
+        args.output
+        or f"outputs/metrics_{args.algorithm}_{args.scaler}.csv"
+    )
 
     trainer = Trainer(
         env=env,

@@ -53,6 +53,19 @@ agent:
 dyna_q:
   planning_steps: 5
 
+# Dyna-Q+ specific (extends Dyna-Q with exploration bonus kappa * sqrt(tau))
+dyna_q_plus:
+  planning_steps: 5
+  kappa: 0.001          # exploration bonus coefficient
+
+# DQN specific (requires PyTorch: pip install torch)
+dqn:
+  hidden_dim: 64        # hidden layer size (2 hidden layers)
+  learning_rate: 0.001  # Adam optimizer LR (overrides agent.learning_rate)
+  buffer_capacity: 10000
+  batch_size: 32
+  target_update_freq: 100  # steps between target network syncs
+
 # Training
 training:
   num_episodes: 10

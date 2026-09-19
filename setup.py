@@ -18,6 +18,9 @@ setup(
         "matplotlib>=3.5.0",
         "pyyaml>=5.4.0",
     ],
+    extras_require={
+        "dqn": ["torch>=2.0.0"],
+    },
     entry_points={
         "console_scripts": [
             "k8s-rl-train=k8s_rl_scaling.cli:main",

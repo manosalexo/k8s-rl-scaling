@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare training results across all 4 algorithm-scaler combinations.
+"""Compare training results across all algorithm-scaler combinations.
 
 Usage:
     python scripts/compare_results.py --input-dir outputs/
@@ -11,41 +11,39 @@ import os
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
-COMBINATIONS = [
-    ("q-learning", "hpa"),
-    ("q-learning", "vpa"),
-    ("dyna-q", "hpa"),
-    ("dyna-q", "vpa"),
+PALETTE = [
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
+    "#9467bd", "#8c564b", "#e377c2", "#17becf",
 ]
 
-COLORS = {
-    ("q-learning", "hpa"): "#1f77b4",
-    ("q-learning", "vpa"): "#ff7f0e",
-    ("dyna-q", "hpa"): "#2ca02c",
-    ("dyna-q", "vpa"): "#d62728",
-}
 
-
-def load_results(input_dir: str) -> dict[tuple, pd.DataFrame]:
+def load_results(input_dir: str) -> dict[tuple[str, str], pd.DataFrame]:
     results = {}
-    for algo, scaler in COMBINATIONS:
-        path = os.path.join(input_dir, f"metrics_{algo}_{scaler}.csv")
-        if os.path.exists(path):
-            results[(algo, scaler)] = pd.read_csv(path)
-            print(f"Loaded {path}")
-        else:
-            print(f"Not found: {path} (skipping)")
+    if not os.path.isdir(input_dir):
+        return results
+    for f in sorted(os.listdir(input_dir)):
+        if f.startswith("metrics_") and f.endswith(".csv"):
+            stem = f[len("metrics_"):-len(".csv")]
+            parts = stem.rsplit("_", 1)
+            if len(parts) == 2 and parts[1] in ("hpa", "vpa"):
+                algo, scaler = parts
+                path = os.path.join(input_dir, f)
+                results[(algo, scaler)] = pd.read_csv(path)
+                print(f"Loaded {path}")
     return results
+
+
+def _color_for(idx: int) -> str:
+    return PALETTE[idx % len(PALETTE)]
 
 
 def plot_rewards(results: dict, output_dir: str):
     fig, ax = plt.subplots(figsize=(10, 6))
-    for (algo, scaler), df in results.items():
+    for i, ((algo, scaler), df) in enumerate(results.items()):
         rewards = df.groupby("Episode")["Reward"].sum()
         label = f"{algo.upper()} + {scaler.upper()}"
         ax.plot(rewards.index, rewards.values, label=label,
-                color=COLORS[(algo, scaler)], linewidth=2)
+                color=_color_for(i), linewidth=2)
     ax.set_xlabel("Episode")
     ax.set_ylabel("Total Reward")
     ax.set_title("Cumulative Reward per Episode")
@@ -58,11 +56,11 @@ def plot_rewards(results: dict, output_dir: str):
 
 def plot_latency(results: dict, output_dir: str):
     fig, ax = plt.subplots(figsize=(10, 6))
-    for (algo, scaler), df in results.items():
+    for i, ((algo, scaler), df) in enumerate(results.items()):
         avg_latency = df.groupby("Episode")["Latency"].mean()
         label = f"{algo.upper()} + {scaler.upper()}"
         ax.plot(avg_latency.index, avg_latency.values, label=label,
-                color=COLORS[(algo, scaler)], linewidth=2)
+                color=_color_for(i), linewidth=2)
     ax.set_xlabel("Episode")
     ax.set_ylabel("Average Latency (ms)")
     ax.set_title("Average Latency per Episode")
@@ -76,9 +74,9 @@ def plot_latency(results: dict, output_dir: str):
 def plot_resource_usage(results: dict, output_dir: str):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
-    for (algo, scaler), df in results.items():
+    for i, ((algo, scaler), df) in enumerate(results.items()):
         label = f"{algo.upper()} + {scaler.upper()}"
-        color = COLORS[(algo, scaler)]
+        color = _color_for(i)
         avg_cpu = df.groupby("Episode")["CPU Usage"].mean()
         avg_ram = df.groupby("Episode")["RAM Usage"].mean()
         ax1.plot(avg_cpu.index, avg_cpu.values, label=label, color=color)

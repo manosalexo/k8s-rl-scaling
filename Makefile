@@ -1,4 +1,4 @@
-.PHONY: install setup-monitoring deploy-workload train-all compare clean help
+.PHONY: install setup-monitoring deploy-workload train-all train-dqn compare clean help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -34,12 +34,19 @@ port-forward: ## Start port-forward for Prometheus (9091) and Grafana (3000)
 	@echo "Prometheus: http://localhost:9091"
 	@echo "Grafana:    http://localhost:3000 (admin/admin)"
 
-train-all: ## Run all 4 algorithm+scaler combinations
+train-all: ## Run all tabular algorithm+scaler combinations
 	@mkdir -p outputs
 	k8s-rl-train --algorithm q-learning --scaler hpa --output outputs/metrics_q-learning_hpa.csv
 	k8s-rl-train --algorithm q-learning --scaler vpa --output outputs/metrics_q-learning_vpa.csv
 	k8s-rl-train --algorithm dyna-q --scaler hpa --output outputs/metrics_dyna-q_hpa.csv
 	k8s-rl-train --algorithm dyna-q --scaler vpa --output outputs/metrics_dyna-q_vpa.csv
+	k8s-rl-train --algorithm dyna-q-plus --scaler hpa --output outputs/metrics_dyna-q-plus_hpa.csv
+	k8s-rl-train --algorithm dyna-q-plus --scaler vpa --output outputs/metrics_dyna-q-plus_vpa.csv
+
+train-dqn: ## Run DQN combinations (requires: pip install -e '.[dqn]')
+	@mkdir -p outputs
+	k8s-rl-train --algorithm dqn --scaler hpa --output outputs/metrics_dqn_hpa.csv
+	k8s-rl-train --algorithm dqn --scaler vpa --output outputs/metrics_dqn_vpa.csv
 
 compare: ## Generate comparison plots from training results
 	python scripts/compare_results.py --input-dir outputs/ --output-dir outputs/plots/

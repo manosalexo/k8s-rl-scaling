@@ -73,7 +73,8 @@ class Trainer:
                 for step in range(self.max_steps):
                     action = self.agent.choose_action(state)
                     next_state, reward, terminated, truncated, info = self.env.step(action)
-                    self.agent.learn(state, action, reward, next_state)
+                    self.agent.learn(state, action, reward, next_state,
+                                     done=terminated or truncated)
 
                     cpu, ram = self.collector.collect()
                     elapsed = time.time() - start_time

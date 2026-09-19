@@ -1,6 +1,7 @@
 """Collect CPU and memory metrics from Prometheus via SSH tunnel."""
 
 import json
+from urllib.parse import quote
 
 import numpy as np
 import paramiko
@@ -41,27 +42,45 @@ class MetricsCollector:
         )
         return ssh
 
-    def _query_prometheus(self, ssh: paramiko.SSHClient, query: str) -> str:
-        cmd = f"curl -s '{self.prometheus_endpoint}/api/v1/query?query={query}'"
-        _, stdout, _ = ssh.exec_command(cmd)
-        return stdout.read().decode("utf-8")
+    def _query_prometheus(self, ssh: paramiko.SSHClient, query: str) -> dict:
+        encoded_query = quote(query, safe="")
+        url = f"{self.prometheus_endpoint}/api/v1/query?query={encoded_query}"
+        cmd = f"curl -sf '{url}'"
+        _, stdout, stderr = ssh.exec_command(cmd)
+        out = stdout.read().decode("utf-8")
+        err = stderr.read().decode("utf-8")
+        if not out:
+            raise RuntimeError(
+                f"Prometheus query returned no output. "
+                f"Query: {query}, stderr: {err}"
+            )
+        data = json.loads(out)
+        if data.get("status") != "success":
+            raise RuntimeError(f"Prometheus query failed: {data}")
+        return data
 
     def collect(self) -> tuple[float, float]:
         """Return (cpu_fraction, memory_gb)."""
         ssh = self._connect()
         try:
-            cpu_raw = self._query_prometheus(
+            cpu_data = self._query_prometheus(
                 ssh, "sum(rate(container_cpu_usage_seconds_total[1m]))"
             )
-            mem_raw = self._query_prometheus(
+            mem_data = self._query_prometheus(
                 ssh, "sum(container_memory_usage_bytes)"
             )
 
-            cpu_data = json.loads(cpu_raw)
-            mem_data = json.loads(mem_raw)
+            cpu_results = cpu_data["data"]["result"]
+            mem_results = mem_data["data"]["result"]
 
-            cpu_usage = float(cpu_data["data"]["result"][0]["value"][1])
-            mem_usage = float(mem_data["data"]["result"][0]["value"][1])
+            if not cpu_results or not mem_results:
+                raise RuntimeError(
+                    "Prometheus returned empty results — "
+                    "check that cAdvisor metrics are being scraped"
+                )
+
+            cpu_usage = float(cpu_results[0]["value"][1])
+            mem_usage = float(mem_results[0]["value"][1])
 
             cpu_fraction = cpu_usage / self.total_cpu_cores
             memory_gb = mem_usage / (1024**3)

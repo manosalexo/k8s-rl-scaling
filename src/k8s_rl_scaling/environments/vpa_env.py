@@ -135,18 +135,9 @@ class VPAEnv(gym.Env):
         return reward
 
     def step(self, action: int):
-        state = self._get_latency()
-        latency = float(state[0])
-
-        if latency > self.latency_high:
-            action = 2
-        elif latency < self.latency_low:
-            action = 0
-        else:
-            action = 1
-
         self._scale(action)
         next_state = self._get_latency()
+        latency = float(next_state[0])
         reward = self._compute_reward(latency)
 
         return (
@@ -154,7 +145,11 @@ class VPAEnv(gym.Env):
             reward,
             False,
             False,
-            {"cpu": self.current_cpu, "memory": self.current_memory},
+            {
+                "cpu": self.current_cpu,
+                "memory": self.current_memory,
+                "action_taken": action,
+            },
         )
 
     def reset(self, seed=None, options=None):

@@ -8,19 +8,28 @@ import time
 def parse_jmeter_csv(
     file_path: str, start_line: int = 0
 ) -> tuple[list[int], list[int], int]:
-    """Parse JMeter CSV output and return (latencies, load_times, lines_read)."""
+    """Parse JMeter CSV output and return (latencies, load_times, total_lines_read).
+
+    Skips the header row (line 0) automatically when start_line is 0.
+    """
     latencies = []
     load_times = []
-    total_lines = 0
     with open(file_path) as f:
-        lines = f.readlines()[start_line:]
-        total_lines = len(lines)
-        for line in lines:
-            cols = line.strip().split(",")
-            if len(cols) > 2:
+        all_lines = f.readlines()
+
+    effective_start = max(start_line, 1)
+    lines = all_lines[effective_start:]
+
+    for line in lines:
+        cols = line.strip().split(",")
+        if len(cols) > 2:
+            try:
                 load_times.append(int(cols[1]))
                 latencies.append(int(cols[-3]))
-    return latencies, load_times, total_lines
+            except ValueError:
+                continue
+
+    return latencies, load_times, effective_start + len(lines)
 
 
 class JMeterRunner:
@@ -57,9 +66,18 @@ class JMeterRunner:
 
     def get_last_latency(self) -> float:
         """Read the most recent latency value from the JMeter CSV."""
+        if not os.path.exists(self.csv_output):
+            return 0.0
         with open(self.csv_output) as f:
             lines = f.readlines()
-            if len(lines) > 1:
-                cols = lines[-1].strip().split(",")
-                return float(cols[-3])
+        for line in reversed(lines):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            cols = stripped.split(",")
+            if len(cols) > 2:
+                try:
+                    return float(cols[-3])
+                except ValueError:
+                    continue
         return 0.0

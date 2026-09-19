@@ -50,6 +50,10 @@ class Trainer:
         start_time = time.time()
         last_line = 0
 
+        # Run JMeter once before training to produce initial CSV
+        self.jmeter.run(wait=True)
+        self.jmeter.wait_for_output()
+
         with open(self.output_csv, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(self._csv_header())
@@ -59,9 +63,8 @@ class Trainer:
                     self.jmeter.run(wait=True)
                     self.jmeter.wait_for_output()
 
-                latencies, load_times, last_line = parse_jmeter_csv(
-                    self.jmeter.csv_output,
-                    last_line if episode > 1 else 0,
+                _, load_times, last_line = parse_jmeter_csv(
+                    self.jmeter.csv_output, last_line
                 )
 
                 state, _ = self.env.reset()
@@ -69,7 +72,7 @@ class Trainer:
 
                 for step in range(self.max_steps):
                     action = self.agent.choose_action(state)
-                    next_state, reward, terminated, truncated, _ = self.env.step(action)
+                    next_state, reward, terminated, truncated, info = self.env.step(action)
                     self.agent.learn(state, action, reward, next_state)
 
                     cpu, ram = self.collector.collect()
@@ -78,7 +81,7 @@ class Trainer:
 
                     writer.writerow(
                         self._csv_row(episode, step, elapsed, cpu, ram,
-                                      reward, state[0], lt)
+                                      reward, float(next_state[0]), lt)
                     )
 
                     state = next_state

@@ -98,21 +98,15 @@ class HPAEnv(gym.Env):
         return reward
 
     def step(self, action: int):
-        state = self._get_latency()
-        latency = float(state[0])
-
-        if latency > self.latency_high:
-            action = 2
-        elif latency < self.latency_low:
-            action = 0
-        else:
-            action = 1
-
         self._scale(action)
         next_state = self._get_latency()
+        latency = float(next_state[0])
         reward = self._compute_reward(latency)
 
-        return next_state, reward, False, False, {"replicas": self.current_replicas}
+        return next_state, reward, False, False, {
+            "replicas": self.current_replicas,
+            "action_taken": action,
+        }
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed, options=options)

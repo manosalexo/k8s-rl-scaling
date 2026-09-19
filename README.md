@@ -53,27 +53,34 @@ This project accompanies a master's thesis at the **University of West Attica**,
 ```
 k8s-rl-scaling/
 ├── config/
-│   └── default.yaml          # All configurable parameters (uses env vars for secrets)
+│   └── default.yaml              # All configurable parameters (uses env vars for secrets)
 ├── src/k8s_rl_scaling/
 │   ├── agents/
-│   │   ├── q_learning.py      # Tabular Q-Learning with epsilon-greedy
-│   │   └── dyna_q.py          # Dyna-Q extending Q-Learning with model-based planning
+│   │   ├── q_learning.py          # Tabular Q-Learning with epsilon-greedy
+│   │   └── dyna_q.py              # Dyna-Q extending Q-Learning with model-based planning
 │   ├── environments/
-│   │   ├── hpa_env.py         # Gymnasium env — scales replicas via K8s API
-│   │   └── vpa_env.py         # Gymnasium env — scales CPU/memory requests via K8s API
+│   │   ├── hpa_env.py             # Gymnasium env — scales replicas via K8s API
+│   │   └── vpa_env.py             # Gymnasium env — scales CPU/memory requests via K8s API
 │   ├── metrics/
-│   │   ├── collector.py       # Prometheus metrics via SSH tunnel
-│   │   └── jmeter.py          # JMeter execution and CSV parsing
+│   │   ├── collector.py           # Prometheus metrics via SSH tunnel
+│   │   └── jmeter.py              # JMeter execution and CSV parsing
 │   ├── training/
-│   │   └── trainer.py         # Training loop orchestration
-│   ├── config.py              # YAML loader with env-var expansion
-│   └── cli.py                 # CLI entry point
+│   │   └── trainer.py             # Training loop orchestration
+│   ├── config.py                  # YAML loader with env-var expansion
+│   └── cli.py                     # CLI entry point
 ├── scripts/
-│   └── compare_results.py     # Plot reward/latency/resource comparisons
+│   └── compare_results.py         # Plot reward/latency/resource comparisons
 ├── k8s/
-│   ├── nginx-deployment.yaml  # Target NGINX deployment + service
-│   └── prometheus-config.yaml # Prometheus scrape configuration
-├── notebooks/                 # Original experiment notebooks (sanitized)
+│   ├── nginx-deployment.yaml      # Target NGINX deployment + service
+│   └── monitoring/                # Full monitoring stack manifests
+│       ├── namespace.yaml
+│       ├── prometheus-rbac.yaml
+│       ├── prometheus-config.yaml
+│       ├── prometheus-deployment.yaml
+│       └── grafana-deployment.yaml # Grafana + auto-provisioned Prometheus datasource
+├── docs/
+│   └── setup-guide.md             # Step-by-step infrastructure setup guide
+├── Makefile                       # make setup-all, train-all, compare, etc.
 ├── requirements.txt
 ├── setup.py
 └── LICENSE
@@ -85,8 +92,9 @@ k8s-rl-scaling/
 
 - Python 3.10+
 - Access to a Kubernetes cluster (MicroK8s, minikube, etc.)
-- Prometheus deployed and collecting container metrics
-- Apache JMeter for load generation
+- Apache JMeter 5.5+ for load generation
+
+> **Detailed setup instructions** for MicroK8s, Prometheus, Grafana, JMeter, and SSH tunneling are in [`docs/setup-guide.md`](docs/setup-guide.md).
 
 ### Installation
 
@@ -96,9 +104,25 @@ cd k8s-rl-scaling
 pip install -e .
 ```
 
+### Full Setup (Makefile)
+
+```bash
+make setup-all       # Install Python package + deploy monitoring + NGINX workload
+make port-forward    # Start port-forwards for Prometheus (9091) and Grafana (3000)
+```
+
+Or step by step:
+
+```bash
+make install             # pip install -e .
+make setup-monitoring    # Deploy Prometheus + Grafana to K8s
+make deploy-workload     # Deploy NGINX target deployment
+make port-forward        # Expose Prometheus and Grafana locally
+```
+
 ### Configuration
 
-Copy the default config and set your SSH credentials as environment variables:
+Set your SSH credentials as environment variables:
 
 ```bash
 export SSH_HOSTNAME="your-k8s-node-hostname"
@@ -107,12 +131,6 @@ export SSH_PASSWORD="your-password"
 ```
 
 Or create a `config/local.yaml` (gitignored) with your specific values.
-
-### Deploy the Target Workload
-
-```bash
-kubectl apply -f k8s/nginx-deployment.yaml
-```
 
 ### Train an Agent
 
@@ -127,9 +145,17 @@ k8s-rl-train --algorithm dyna-q --scaler vpa
 k8s-rl-train --algorithm dyna-q --scaler hpa --config config/local.yaml --episodes 20
 ```
 
+### Run All 4 Combinations
+
+```bash
+make train-all
+```
+
 ### Compare Results
 
 ```bash
+make compare
+# or:
 python scripts/compare_results.py --input-dir outputs/ --output-dir outputs/plots/
 ```
 
